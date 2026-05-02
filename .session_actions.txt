@@ -1,0 +1,2 @@
+Replaced static/app.js with minimal verified bundle and created backup static/app.js.bak
+Next: rebuild frontend image and restart frontend service with docker compose.

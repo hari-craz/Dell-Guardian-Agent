@@ -1,24 +1,14 @@
 (function () {
-  const bootstrapData = window.DELL_GUARDIAN_BOOTSTRAP || {};
   const e = React.createElement;
-
-  function formatTime(value) {
-    if (!value) {
-      return "--";
-    }
-    return value;
-  }
-
   function App() {
     const [stats, setStats] = React.useState(null);
     const [logs, setLogs] = React.useState([]);
     const [loading, setLoading] = React.useState(true);
     const [pageAlert, setPageAlert] = React.useState(null);
-    const [modalAlert, setModalAlert] = React.useState(null);
     const [pendingAction, setPendingAction] = React.useState(null);
     const [password, setPassword] = React.useState("");
+    const [modalAlert, setModalAlert] = React.useState(null);
     const modalRef = React.useRef(null);
-    const modalInstanceRef = React.useRef(null);
 
     const refreshData = React.useCallback(async () => {
       try {
@@ -26,13 +16,12 @@
           fetch("/api/stats", { cache: "no-store" }),
           fetch("/api/logs", { cache: "no-store" })
         ]);
-
         const statsPayload = await statsResponse.json();
         const logsPayload = await logsResponse.json();
         setStats(statsPayload);
         setLogs(Array.isArray(logsPayload.logs) ? logsPayload.logs : []);
       } catch (error) {
-        setPageAlert({ type: "danger", text: "Unable to refresh server metrics." });
+        console.error("Failed to fetch data:", error);
       } finally {
         setLoading(false);
       }
@@ -45,28 +34,9 @@
     }, [refreshData]);
 
     React.useEffect(() => {
-      if (!modalRef.current || !window.bootstrap) {
-        return;
-      }
-      modalInstanceRef.current = window.bootstrap.Modal.getOrCreateInstance(modalRef.current, {
-        backdrop: "static",
-        keyboard: false
-      });
-    }, []);
-
-    React.useEffect(() => {
       const timer = window.setTimeout(() => setPageAlert(null), 3800);
       return () => window.clearTimeout(timer);
     }, [pageAlert]);
-
-    React.useEffect(() => {
-      if (pendingAction && modalInstanceRef.current) {
-        modalInstanceRef.current.show();
-      }
-      if (!pendingAction && modalInstanceRef.current) {
-        modalInstanceRef.current.hide();
-      }
-    }, [pendingAction]);
 
     async function pingServer() {
       try {
@@ -74,7 +44,7 @@
         const payload = await response.json();
         setPageAlert({
           type: response.ok ? "success" : "danger",
-          text: `Ping response: ${payload.status}`
+          text: `Ping: ${payload.status}`
         });
         refreshData();
       } catch (error) {
@@ -82,34 +52,38 @@
       }
     }
 
-    function openControl(action) {
+    function openAction(action) {
       setPendingAction(action);
       setPassword("");
       setModalAlert(null);
+      setTimeout(() => {
+        if (modalRef.current && window.bootstrap) {
+          const modal = window.bootstrap.Modal.getOrCreateInstance(modalRef.current);
+          modal.show();
+        }
+      }, 0);
     }
 
-    function closeControl() {
+    function closeAction() {
       setPendingAction(null);
       setPassword("");
       setModalAlert(null);
+      if (modalRef.current && window.bootstrap) {
+        const modal = window.bootstrap.Modal.getInstance(modalRef.current);
+        if (modal) modal.hide();
+      }
     }
 
-    async function submitControl(event) {
+    async function submitAction(event) {
       event.preventDefault();
-
-      const action = pendingAction;
-      if (!action) {
-        return;
-      }
+      if (!pendingAction) return;
 
       try {
         const response = await fetch("/api/control", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
+          headers: { "Content-Type": "application/json" },
           cache: "no-store",
-          body: JSON.stringify({ action, password })
+          body: JSON.stringify({ action: pendingAction, password })
         });
         const payload = await response.json();
 
@@ -123,7 +97,7 @@
           text: payload.status || "Action completed."
         });
         if (response.ok) {
-          closeControl();
+          closeAction();
         }
         refreshData();
       } catch (error) {
@@ -131,201 +105,157 @@
       }
     }
 
-    const lastUpdated = stats ? formatTime(stats.server_time) : "--";
-    const dockerCount = stats && stats.docker_running_count !== null && stats.docker_running_count !== undefined
-      ? stats.docker_running_count
-      : "N/A";
-
-    return e("div", { className: "app-shell" },
-      e("div", { className: "container-fluid" },
-        e("div", { className: "hero mb-4" },
-          e("div", { className: "hero-inner" },
-            e("div", { className: "eyebrow" },
-              e("i", { className: "fa-solid fa-shield-halved" }),
-              "Secure Host Control"
-            ),
-            e("div", { className: "dashboard-title" }, bootstrapData.dashboardTitle || "Dell Guardian Agent Control Center"),
-            e("p", { className: "subtitle" },
-              "A hardened server control surface for the Dell M380 host with live telemetry, audit logging, and guarded power actions."
-            ),
-            e("div", { className: "status-row" },
-              e("span", { className: "status-pill" }, e("span", { className: "status-dot" }), "Host online"),
-              e("span", { className: "status-pill" }, e("i", { className: "fa-solid fa-laptop-code text-info" }), `Hostname: ${bootstrapData.displayName || "Dell M380"}`),
-              e("span", { className: "status-pill" }, e("i", { className: "fa-solid fa-network-wired text-info" }), `IP: ${bootstrapData.displayIp || "192.168.13.5"}`),
-              e("span", { className: "status-pill" }, e("i", { className: "fa-solid fa-clock text-info" }), `Last refresh: ${lastUpdated}`)
-            )
-          )
-        ),
-        e("div", { className: "row g-4" },
-          e("div", { className: "col-12 col-xxl-8" },
-            e("div", { className: "row g-4" },
-              [
-                {
-                  icon: "fa-solid fa-server",
-                  label: "Container Status",
-                  value: stats ? stats.container_status : loading ? "Loading..." : "--",
-                  subtext: "Docker runtime state"
-                },
-                {
-                  icon: "fa-solid fa-microchip",
-                  label: "CPU Load",
-                  value: stats ? `${stats.cpu_load_percent}%` : loading ? "Loading..." : "--",
-                  subtext: "Rolling system load snapshot"
-                },
-                {
-                  icon: "fa-solid fa-memory",
-                  label: "RAM Usage",
-                  value: stats ? `${stats.ram_usage_percent}%` : loading ? "Loading..." : "--",
-                  subtext: stats ? `${stats.ram_used} / ${stats.ram_total}` : "Memory usage metrics"
-                },
-                {
-                  icon: "fa-solid fa-hard-drive",
-                  label: "Disk Usage",
-                  value: stats ? `${stats.disk_usage_percent}%` : loading ? "Loading..." : "--",
-                  subtext: stats ? `${stats.disk_used} / ${stats.disk_total}` : "Disk occupancy"
-                },
-                {
-                  icon: "fa-solid fa-hourglass-half",
-                  label: "Uptime",
-                  value: stats ? stats.uptime : loading ? "Loading..." : "--",
-                  subtext: "Time since last host boot"
-                },
-                {
-                  icon: "fa-brands fa-docker",
-                  label: "Running Containers",
-                  value: dockerCount,
-                  subtext: "Detected via Docker socket or CLI"
-                }
-              ].map((card) => e("div", { className: "col-12 col-md-6", key: card.label },
-                e("div", { className: "stat-card" },
-                  e("div", { className: "metric-icon" }, e("i", { className: card.icon })),
-                  e("div", { className: "stat-label" }, card.label),
-                  e("div", { className: "stat-value" }, card.value),
-                  e("div", { className: "stat-subtext" }, card.subtext)
-                )
-              )))
+    return e("div", { style: { padding: 28, color: "var(--text)", fontFamily: "Inter,system-ui,sans-serif", maxWidth: "1200px" } },
+      e("h1", null, "Dell Guardian Agent"),
+      e("p", null, "Live System Metrics & Control"),
+      
+      loading ? e("p", null, "Loading...") : (
+        e("div", null,
+          e("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px", marginTop: "20px" } },
+            stats && [
+              {
+                icon: "🖥️",
+                label: "CPU Load",
+                value: `${stats.cpu_load_percent}%`
+              },
+              {
+                icon: "🧠",
+                label: "RAM Usage",
+                value: `${stats.ram_usage_percent}%`,
+                sub: `${stats.ram_used} / ${stats.ram_total}`
+              },
+              {
+                icon: "💾",
+                label: "Disk Usage",
+                value: `${stats.disk_usage_percent}%`,
+                sub: `${stats.disk_used} / ${stats.disk_total}`
+              },
+              {
+                icon: "⏱️",
+                label: "Uptime",
+                value: stats.uptime || "--"
+              },
+              {
+                icon: "🐳",
+                label: "Containers",
+                value: stats.docker_running_count || "N/A"
+              },
+              {
+                icon: "✅",
+                label: "Status",
+                value: stats.container_status || "Running"
+              }
+            ].map((card) => e("div", { key: card.label, style: { padding: "16px", border: "1px solid #444", borderRadius: "8px", backgroundColor: "#1a1a1a" } },
+              e("div", { style: { fontSize: "20px" } }, card.icon),
+              e("div", { style: { fontSize: "12px", color: "#888", marginTop: "8px" } }, card.label),
+              e("div", { style: { fontSize: "24px", fontWeight: "bold", marginTop: "4px" } }, card.value),
+              card.sub ? e("div", { style: { fontSize: "12px", color: "#aaa", marginTop: "8px" } }, card.sub) : null
+            ))
+          ),
+          e("div", { style: { marginTop: "40px", padding: "20px", border: "1px solid #555", borderRadius: "8px", backgroundColor: "#0a0a0a" } },
+            e("h2", { style: { marginTop: 0 } }, "Control Actions"),
+            e("p", { style: { color: "#aaa", marginBottom: "20px" } }, "Click an action below. Password will be required."),
+            e("div", { style: { display: "flex", gap: "12px", flexWrap: "wrap" } },
+              e("button", {
+                onClick: () => openAction("shutdown"),
+                style: { padding: "12px 20px", backgroundColor: "#8b0000", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontSize: "14px", fontWeight: "bold" }
+              }, "🛑 Shutdown Server"),
+              e("button", {
+                onClick: () => openAction("reboot"),
+                style: { padding: "12px 20px", backgroundColor: "#ff8c00", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontSize: "14px", fontWeight: "bold" }
+              }, "🔄 Reboot Server"),
+              e("button", {
+                onClick: pingServer,
+                style: { padding: "12px 20px", backgroundColor: "#0066cc", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontSize: "14px", fontWeight: "bold" }
+              }, "📡 Ping Test")
             )
           ),
-          e("div", { className: "col-12 col-xxl-4" },
-            e("div", { className: "control-panel mb-4" },
-              e("div", { className: "section-heading" },
-                e("div", null,
-                  e("h2", { className: "section-title" }, "Control Actions"),
-                  e("div", { className: "section-meta" }, "Administrative control requires password confirmation")
-                ),
-                e("span", { className: "badge badge-soft rounded-pill px-3 py-2" }, "Protected")
-              ),
-              e("div", { className: "control-actions" },
-                e("button", {
-                  className: "control-btn btn-shutdown",
-                  onClick: () => openControl("shutdown")
-                }, e("i", { className: "fa-solid fa-power-off me-2" }), "Shutdown Server"),
-                e("button", {
-                  className: "control-btn btn-reboot",
-                  onClick: () => openControl("reboot")
-                }, e("i", { className: "fa-solid fa-rotate-right me-2" }), "Reboot Server"),
-                e("button", {
-                  className: "control-btn btn-ping",
-                  onClick: pingServer
-                }, e("i", { className: "fa-solid fa-satellite-dish me-2" }), "Ping Test")
-              )
-            ),
-            e("div", { className: "log-panel" },
-              e("div", { className: "section-heading" },
-                e("div", null,
-                  e("h2", { className: "section-title" }, "Live System Log"),
-                  e("div", { className: "section-meta" }, "Newest events first")
-                ),
-                e("span", { className: "badge badge-soft rounded-pill px-3 py-2" }, `${logs.length} entries`)
-              ),
-              e("div", { className: "log-list" },
-                logs.length ? logs.map((item, index) =>
-                  e("div", { className: "log-item", key: `${item.timestamp}-${index}` },
-                    e("div", { className: "log-badge" },
-                      e("i", { className: item.level === "critical" ? "fa-solid fa-triangle-exclamation" : item.level === "warning" ? "fa-solid fa-circle-exclamation" : "fa-solid fa-wave-square" })
-                    ),
-                    e("div", null,
-                      e("div", { className: "log-title" }, item.message),
-                      e("div", { className: "log-meta" }, `${item.timestamp} • ${item.source.toUpperCase()} • ${item.level.toUpperCase()}`)
-                    )
-                  )
-                ) : e("div", { className: "text-muted-soft" }, "No events recorded yet.")
-              )
-            )
-          )
-        ),
-        e("div", { className: "row g-4 mt-1" },
-          e("div", { className: "col-12" },
-            e("div", { className: "detail-card" },
-              e("div", { className: "section-heading" },
-                e("h2", { className: "section-title mb-0" }, "Telemetry Overview"),
-                e("span", { className: "section-meta" }, stats ? `Server time: ${stats.server_time}` : "Awaiting initial metrics")
-              ),
-              e("div", { className: "row g-3" },
-                e("div", { className: "col-12 col-md-4" },
-                  e("div", { className: "p-3 rounded-4 bg-dark bg-opacity-25 border border-white border-opacity-10 h-100" },
-                    e("div", { className: "stat-label" }, "Host identity"),
-                    e("div", { className: "stat-value fs-4" }, bootstrapData.displayName || "Dell M380"),
-                    e("div", { className: "stat-subtext" }, bootstrapData.displayIp || "192.168.13.5")
-                  )
-                ),
-                e("div", { className: "col-12 col-md-4" },
-                  e("div", { className: "p-3 rounded-4 bg-dark bg-opacity-25 border border-white border-opacity-10 h-100" },
-                    e("div", { className: "stat-label" }, "Container status"),
-                    e("div", { className: "stat-value fs-4" }, stats ? stats.container_status : "Running"),
-                    e("div", { className: "stat-subtext" }, "Managed inside Portainer-friendly Docker deployment")
-                  )
-                ),
-                e("div", { className: "col-12 col-md-4" },
-                  e("div", { className: "p-3 rounded-4 bg-dark bg-opacity-25 border border-white border-opacity-10 h-100" },
-                    e("div", { className: "stat-label" }, "System uptime"),
-                    e("div", { className: "stat-value fs-4" }, stats ? stats.uptime : "--"),
-                    e("div", { className: "stat-subtext" }, "Updated every 5 seconds")
-                  )
+
+          e("div", { style: { marginTop: "40px", padding: "20px", border: "1px solid #555", borderRadius: "8px", backgroundColor: "#0a0a0a" } },
+            e("h2", { style: { marginTop: 0, marginBottom: "16px" } }, `Live System Log (${logs.length} entries)`),
+            e("div", { style: { maxHeight: "300px", overflowY: "auto", backgroundColor: "#1a1a1a", borderRadius: "6px", padding: "12px" } },
+              logs.length ? logs.map((item, index) =>
+                e("div", { key: `${item.timestamp}-${index}`, style: { padding: "8px", borderBottom: "1px solid #333", fontSize: "12px", color: "#ccc" } },
+                  e("div", { style: { fontWeight: "bold", color: item.level === "critical" ? "#ff6b6b" : item.level === "warning" ? "#ffa500" : "#4fc3f7" } }, `${item.level.toUpperCase()} - ${item.source}`),
+                  e("div", { style: { marginTop: "4px" } }, item.message),
+                  e("div", { style: { color: "#666", marginTop: "4px", fontSize: "11px" } }, item.timestamp)
                 )
+              ) : e("div", { style: { color: "#666", textAlign: "center", padding: "20px" } }, "No events recorded yet.")
+            )
+          ),
+
+          e("div", { style: { marginTop: "40px", padding: "20px", border: "1px solid #555", borderRadius: "8px", backgroundColor: "#0a0a0a" } },
+            e("h2", { style: { marginTop: 0, marginBottom: "20px" } }, "Telemetry Overview"),
+            e("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px" } },
+              e("div", { style: { padding: "16px", backgroundColor: "#1a1a1a", borderRadius: "6px", border: "1px solid #444" } },
+                e("div", { style: { fontSize: "12px", color: "#888" } }, "Host Identity"),
+                e("div", { style: { fontSize: "18px", fontWeight: "bold", marginTop: "8px" } }, "Dell M380"),
+                e("div", { style: { fontSize: "12px", color: "#aaa", marginTop: "8px" } }, "192.168.13.5")
+              ),
+              e("div", { style: { padding: "16px", backgroundColor: "#1a1a1a", borderRadius: "6px", border: "1px solid #444" } },
+                e("div", { style: { fontSize: "12px", color: "#888" } }, "Container Status"),
+                e("div", { style: { fontSize: "18px", fontWeight: "bold", marginTop: "8px", color: "#4fc3f7" } }, stats ? stats.container_status : "Running"),
+                e("div", { style: { fontSize: "12px", color: "#aaa", marginTop: "8px" } }, "Managed deployment")
+              ),
+              e("div", { style: { padding: "16px", backgroundColor: "#1a1a1a", borderRadius: "6px", border: "1px solid #444" } },
+                e("div", { style: { fontSize: "12px", color: "#888" } }, "Last Updated"),
+                e("div", { style: { fontSize: "18px", fontWeight: "bold", marginTop: "8px" } }, stats ? stats.server_time : "--"),
+                e("div", { style: { fontSize: "12px", color: "#aaa", marginTop: "8px" } }, "Refreshed every 5 seconds")
               )
             )
           )
         )
       ),
-      pageAlert ? e("div", { className: `floating-alert ${pageAlert.type}` }, pageAlert.text) : null,
+      
       e("div", {
         className: "modal fade",
         id: "passwordModal",
         tabIndex: "-1",
         ref: modalRef,
-        "aria-hidden": "true"
+        "aria-hidden": "true",
+        style: { display: pendingAction ? "block" : "none", backgroundColor: "rgba(0,0,0,0.5)" }
       },
-        e("div", { className: "modal-dialog modal-dialog-centered" },
-          e("div", { className: "modal-content" },
-            e("div", { className: "modal-header" },
-              e("h5", { className: "modal-title" }, pendingAction ? `${pendingAction.toUpperCase()} Confirmation` : "Admin Confirmation"),
-              e("button", { type: "button", className: "btn-close btn-close-white", onClick: closeControl })
-            ),
-            e("form", { onSubmit: submitControl },
-              e("div", { className: "modal-body" },
-                e("p", { className: "text-muted-soft mb-3" }, "Enter Admin Password"),
-                e("input", {
-                  className: "form-control form-control-lg",
-                  type: "password",
-                  value: password,
-                  onChange: (event) => setPassword(event.target.value),
-                  placeholder: "Admin password",
-                  autoFocus: true
-                }),
-                modalAlert ? e("div", { className: "alert alert-danger mt-3 mb-0" }, modalAlert) : null
-              ),
-              e("div", { className: "modal-footer" },
-                e("button", { type: "button", className: "btn btn-outline-light", onClick: closeControl }, "Cancel"),
-                e("button", { type: "submit", className: "btn btn-info fw-bold text-dark" }, "Confirm Action")
-              )
+        e("div", { style: { position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", backgroundColor: "#1a1a1a", borderRadius: "8px", border: "1px solid #444", padding: "24px", maxWidth: "400px", width: "90%", zIndex: 9999 } },
+          e("h2", { style: { marginTop: 0, color: "white" } }, pendingAction ? `${pendingAction.toUpperCase()} Confirmation` : "Admin Confirmation"),
+          e("p", { style: { color: "#aaa" } }, "Enter Admin Password"),
+          e("form", { onSubmit: submitAction, style: { display: "flex", flexDirection: "column", gap: "12px" } },
+            e("input", {
+              type: "password",
+              value: password,
+              onChange: (event) => setPassword(event.target.value),
+              placeholder: "Admin password",
+              autoFocus: true,
+              style: { padding: "10px", backgroundColor: "#0a0a0a", color: "white", border: "1px solid #444", borderRadius: "6px", fontSize: "14px" }
+            }),
+            modalAlert ? e("div", { style: { backgroundColor: "#8b0000", color: "white", padding: "12px", borderRadius: "6px", fontSize: "14px" } }, modalAlert) : null,
+            e("div", { style: { display: "flex", gap: "12px", marginTop: "12px" } },
+              e("button", {
+                type: "button",
+                onClick: closeAction,
+                style: { padding: "10px 16px", backgroundColor: "#444", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", flex: 1 }
+              }, "Cancel"),
+              e("button", {
+                type: "submit",
+                style: { padding: "10px 16px", backgroundColor: "#0066cc", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", flex: 1, fontWeight: "bold" }
+              }, "Confirm Action")
             )
           )
         )
-      )
+      ),
+
+      pageAlert ? e("div", { style: { 
+        position: "fixed", 
+        bottom: "20px", 
+        right: "20px", 
+        padding: "16px 24px", 
+        borderRadius: "6px", 
+        backgroundColor: pageAlert.type === "success" ? "#28a745" : "#dc3545",
+        color: "white",
+        fontWeight: "bold",
+        maxWidth: "300px"
+      } }, pageAlert.text) : null
     );
   }
-
   const container = ReactDOM.createRoot(document.getElementById("root"));
   container.render(e(App));
 })();
