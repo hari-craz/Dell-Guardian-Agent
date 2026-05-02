@@ -3,6 +3,7 @@ services:
     build: .
     container_name: dellguardian
     network_mode: host
+    pid: host
     privileged: true
     restart: always
     env_file:
@@ -17,3 +18,4 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - /sbin:/sbin
       - /usr/sbin:/usr/sbin
+      - /proc:/host_proc:ro
