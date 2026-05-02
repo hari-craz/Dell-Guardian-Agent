@@ -8,7 +8,7 @@ import subprocess
 import threading
 import time
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, request
 import psutil
 
 
@@ -155,17 +155,6 @@ def collect_stats() -> dict:
     }
 
 
-@app.route("/")
-def index():
-    log_event("Dashboard page opened", source="ui")
-    return render_template(
-        "index.html",
-        dashboard_title="Dell Guardian Agent Control Center",
-        display_name=DISPLAY_NAME,
-        display_ip=DISPLAY_IP,
-    )
-
-
 @app.route("/ping")
 def ping():
     log_event("Ping request received", source="api")
@@ -207,4 +196,4 @@ def logs():
 
 if __name__ == "__main__":
     log_event("Secure Dell Guardian Agent started")
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5051")))
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "10001")))

@@ -23,8 +23,8 @@
     const refreshData = React.useCallback(async () => {
       try {
         const [statsResponse, logsResponse] = await Promise.all([
-          fetch("/stats", { cache: "no-store" }),
-          fetch("/logs", { cache: "no-store" })
+          fetch("/api/stats", { cache: "no-store" }),
+          fetch("/api/logs", { cache: "no-store" })
         ]);
 
         const statsPayload = await statsResponse.json();
@@ -70,7 +70,7 @@
 
     async function pingServer() {
       try {
-        const response = await fetch("/ping", { cache: "no-store" });
+        const response = await fetch("/api/ping", { cache: "no-store" });
         const payload = await response.json();
         setPageAlert({
           type: response.ok ? "success" : "danger",
@@ -103,7 +103,7 @@
       }
 
       try {
-        const response = await fetch("/control", {
+        const response = await fetch("/api/control", {
           method: "POST",
           headers: {
             "Content-Type": "application/json"

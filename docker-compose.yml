@@ -1,7 +1,7 @@
 services:
-  dellguardian:
+  dellguardian-backend:
     build: .
-    container_name: dellguardian
+    container_name: dellguardian-backend
     network_mode: host
     pid: host
     privileged: true
@@ -19,3 +19,14 @@ services:
       - /sbin:/sbin
       - /usr/sbin:/usr/sbin
       - /proc:/host_proc:ro
+
+  dellguardian-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: dellguardian-frontend
+    ports:
+      - "10001:10001"
+    restart: always
+    depends_on:
+      - dellguardian-backend
