@@ -5,12 +5,15 @@ services:
     network_mode: host
     privileged: true
     restart: always
+    env_file:
+      - .env
     environment:
-      - PORT=5051
-      - DELL_GUARDIAN_PASSWORD=hari1234
-      - DELL_GUARDIAN_HOSTNAME=Dell M380
-      - DELL_GUARDIAN_IP=192.168.13.5
+      - PORT=${PORT:-5051}
+      - DELL_GUARDIAN_PASSWORD=${DELL_GUARDIAN_PASSWORD:-hari1234}
+      - DELL_GUARDIAN_HOSTNAME=${DELL_GUARDIAN_HOSTNAME:-Dell M380}
+      - DELL_GUARDIAN_IP=${DELL_GUARDIAN_IP:-192.168.13.5}
+      - DELL_GUARDIAN_CONTAINER_STATUS=${DELL_GUARDIAN_CONTAINER_STATUS:-Running}
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/run/docker.sock:/var/run/docker.sock
       - /sbin:/sbin
       - /usr/sbin:/usr/sbin

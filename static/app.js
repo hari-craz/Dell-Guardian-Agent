@@ -2,8 +2,6 @@
   const bootstrapData = window.DELL_GUARDIAN_BOOTSTRAP || {};
   const e = React.createElement;
 
-  const adminPassword = bootstrapData.adminPassword || "hari1234";
-
   function formatTime(value) {
     if (!value) {
       return "--";
@@ -99,26 +97,34 @@
     async function submitControl(event) {
       event.preventDefault();
 
-      if (password !== adminPassword) {
-        setModalAlert("Invalid password. Action blocked.");
-        return;
-      }
-
       const action = pendingAction;
       if (!action) {
         return;
       }
 
       try {
-        const response = await fetch(`/${action}?key=${encodeURIComponent(password)}`, {
-          cache: "no-store"
+        const response = await fetch("/control", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          cache: "no-store",
+          body: JSON.stringify({ action, password })
         });
         const payload = await response.json();
+
+        if (response.status === 403) {
+          setModalAlert("Invalid password. Action blocked.");
+          return;
+        }
+
         setPageAlert({
           type: response.ok ? "success" : "danger",
           text: payload.status || "Action completed."
         });
-        closeControl();
+        if (response.ok) {
+          closeControl();
+        }
         refreshData();
       } catch (error) {
         setPageAlert({ type: "danger", text: "Action failed. Check server logs." });

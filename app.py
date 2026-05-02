@@ -44,8 +44,8 @@ def get_event_log() -> list[dict]:
         return list(_events)
 
 
-def is_authorized() -> bool:
-    return request.args.get("key", "") == ADMIN_PASSWORD
+def is_password_valid(password: str) -> bool:
+    return password == ADMIN_PASSWORD
 
 
 def human_bytes(value: float) -> str:
@@ -92,6 +92,44 @@ def get_docker_running_count() -> int | None:
     return None
 
 
+def execute_host_action(action: str) -> bool:
+    action_map = {
+        "shutdown": [
+            "nsenter",
+            "--target",
+            "1",
+            "--mount",
+            "--uts",
+            "--ipc",
+            "--net",
+            "--pid",
+            "shutdown",
+            "now",
+        ],
+        "reboot": [
+            "nsenter",
+            "--target",
+            "1",
+            "--mount",
+            "--uts",
+            "--ipc",
+            "--net",
+            "--pid",
+            "reboot",
+        ],
+    }
+
+    command = action_map.get(action)
+    if not command:
+        return False
+
+    with suppress(Exception):
+        result = subprocess.run(command, check=False, timeout=8)
+        return result.returncode == 0
+
+    return False
+
+
 def collect_stats() -> dict:
     memory = psutil.virtual_memory()
     disk = psutil.disk_usage("/")
@@ -134,25 +172,26 @@ def ping():
     return jsonify(status="DELL_M380_OK")
 
 
-@app.route("/shutdown")
-def shutdown():
-    if not is_authorized():
-        log_event("Unauthorized shutdown attempt", level="warning", source="api")
+@app.route("/control", methods=["POST"])
+def control():
+    payload = request.get_json(silent=True) or {}
+    action = str(payload.get("action", "")).strip().lower()
+    password = str(payload.get("password", ""))
+
+    if action not in {"shutdown", "reboot"}:
+        return jsonify(status="INVALID_ACTION"), 400
+
+    if not is_password_valid(password):
+        log_event(f"Unauthorized {action} attempt", level="warning", source="api")
         return jsonify(status="ACCESS_DENIED"), 403
 
-    log_event("Authorized shutdown triggered", level="critical", source="api")
-    os.system("shutdown now")
-    return jsonify(status="SHUTDOWN_TRIGGERED")
+    if not execute_host_action(action):
+        log_event(f"Failed {action} execution", level="critical", source="api")
+        return jsonify(status="ACTION_FAILED"), 500
 
-
-@app.route("/reboot")
-def reboot():
-    if not is_authorized():
-        log_event("Unauthorized reboot attempt", level="warning", source="api")
-        return jsonify(status="ACCESS_DENIED"), 403
-
-    log_event("Authorized reboot triggered", level="critical", source="api")
-    os.system("reboot")
+    log_event(f"Authorized {action} triggered", level="critical", source="api")
+    if action == "shutdown":
+        return jsonify(status="SHUTDOWN_TRIGGERED")
     return jsonify(status="REBOOT_TRIGGERED")
 
 
