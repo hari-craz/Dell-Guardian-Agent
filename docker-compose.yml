@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   dellguardian:
     build: .
@@ -7,8 +5,12 @@ services:
     network_mode: host
     privileged: true
     restart: always
+    environment:
+      - PORT=5051
+      - DELL_GUARDIAN_PASSWORD=hari1234
+      - DELL_GUARDIAN_HOSTNAME=Dell M380
+      - DELL_GUARDIAN_IP=192.168.13.5
     volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - /sbin:/sbin
-      - /bin:/bin
       - /usr/sbin:/usr/sbin
-      - /usr/bin:/usr/bin
